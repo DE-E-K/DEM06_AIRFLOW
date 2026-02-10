@@ -60,7 +60,7 @@ class MySQLConnection(DatabaseConnection):
     
     def __init__(self, user: str, password: str, host: str = "localhost", port: int = 3306, database: str = "flight_staging"):
         """Initialize MySQL connection"""
-        super().__init__(user, password, host, port, database, "mysql+pymysql")
+        super().__init__(user, password, host, port, database, "mysql+mysqlconnector")
     
     def get_connection_string(self) -> str:
         """Generate MySQL connection string"""
