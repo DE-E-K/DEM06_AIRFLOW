@@ -57,7 +57,7 @@ class DatabaseConnection:
 class MySQLConnection(DatabaseConnection):
     """MySQL database connection handler"""
     
-    def __init__(self, password: str, user: str="root", host: str="localhost", port: int = 3306, database: str = "flight_staging"):
+    def __init__(self, user: str, password: str, host: str = "localhost", port: int = 3306, database: str = "flight_staging"):
         """Initialize MySQL connection"""
         super().__init__(user, password, host, port, database, "mysql+pymysql")
     
@@ -84,7 +84,7 @@ class MySQLConnection(DatabaseConnection):
 class PostgreSQLConnection(DatabaseConnection):
     """PostgreSQL database connection handler"""
     
-    def __init__(self, password: str, user: str="postgres", host: str="localhost", port: int = 5432, database: str = "flight_analytics"):
+    def __init__(self, user: str, password: str, host: str = "localhost", port: int = 5432, database: str = "flight_analytics"):
         """Initialize PostgreSQL connection"""
         super().__init__(user, password, host, port, database, "postgresql+psycopg2")
     
