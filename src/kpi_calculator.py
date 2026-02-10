@@ -3,7 +3,7 @@ KPI Calculator - Compute key performance indicators for flight pricing analysis
 """
 import pandas as pd
 from typing import Dict, Any
-from sqlalchemy import Engine
+from sqlalchemy.engine import Engine
 from datetime import datetime
 import logging
 

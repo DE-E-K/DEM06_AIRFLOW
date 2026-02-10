@@ -1,6 +1,7 @@
-CREATE DATABASE flight_analytics;
+-- Airflow will auto-create its database via AIRFLOW__CORE__SQL_ALCHEMY_CONN
+-- Flight Analytics database is auto-created via POSTGRES_DATABASE env var
 
-\c flight_analytics;
+-- Tables are created in the POSTGRES_DATABASE (flight_analytics)
 
 CREATE TABLE IF NOT EXISTS flights_enriched (
   id SERIAL PRIMARY KEY,

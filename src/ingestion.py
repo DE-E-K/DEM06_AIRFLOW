@@ -4,7 +4,7 @@ Data ingestion - Load CSV data into MySQL staging table
 import pandas as pd
 from pathlib import Path
 from typing import Tuple, Dict, Any
-from sqlalchemy import Engine
+from sqlalchemy.engine import Engine
 from datetime import datetime
 import logging
 

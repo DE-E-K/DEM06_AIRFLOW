@@ -3,7 +3,7 @@ Data validation - Check data quality and integrity
 """
 import pandas as pd
 from typing import Dict, List, Tuple, Any
-from sqlalchemy import Engine
+from sqlalchemy.engine import Engine
 from datetime import datetime
 import logging
 

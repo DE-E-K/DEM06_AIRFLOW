@@ -3,7 +3,8 @@ Database connection and utility functions for MySQL and PostgreSQL
 """
 import os
 from typing import Optional
-from sqlalchemy import create_engine, Engine, inspect
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine import Engine
 from sqlalchemy.pool import QueuePool
 import logging
 
