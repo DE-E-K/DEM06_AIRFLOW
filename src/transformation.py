@@ -134,7 +134,15 @@ def clean_and_enrich(df: pd.DataFrame, extract_date_col: str = None) -> pd.DataF
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
     # 4. Create or extract flight_date column
-    if 'flight_date' not in df.columns:
+    # Priority: departure_date > extract_date_col > current date
+    if 'departure_date' in df.columns:
+        try:
+            df['flight_date'] = pd.to_datetime(df['departure_date']).dt.date
+            logger.info("Extracted flight_date from departure_date")
+        except Exception as e:
+            logger.warning(f"Could not extract flight_date from departure_date: {e}")
+            df['flight_date'] = None
+    elif 'flight_date' not in df.columns:
         if extract_date_col and extract_date_col in df.columns:
             try:
                 df['flight_date'] = pd.to_datetime(df[extract_date_col]).dt.date
@@ -148,9 +156,23 @@ def clean_and_enrich(df: pd.DataFrame, extract_date_col: str = None) -> pd.DataF
             logger.info("Used current date as flight_date (no date column in source)")
     
     # 5. Classify season
-    if 'flight_date' in df.columns:
+    if 'seasonality' in df.columns:
+        # If seasonality is already provided (from CSV), normalize it
+        df['season'] = df['seasonality'].apply(
+            lambda x: x.upper() if isinstance(x, str) else 'UNKNOWN'
+        )
+        # Map specific values if needed
+        season_map = {
+            'REGULAR': 'NON_PEAK',
+            'EID': 'PEAK_EID',
+            'HAJJ': 'PEAK_EID', # Treat Hajj as Peak Eid for now or separate
+            'WINTER': 'PEAK_WINTER'
+        }
+        df['season'] = df['season'].replace(season_map)
+        logger.info("Used provided 'seasonality' column for season")
+    elif 'flight_date' in df.columns:
         df['season'] = df['flight_date'].apply(classify_season)
-        logger.info("Added season classification")
+        logger.info("Added season classification derived from flight_date")
     else:
         df['season'] = 'UNKNOWN'
     

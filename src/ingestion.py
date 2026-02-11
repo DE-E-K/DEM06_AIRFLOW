@@ -10,6 +10,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Explicit mapping from CSV headers to Internal DB columns
+COLUMN_MAPPING = {
+    'Airline': 'airline',
+    'Source': 'source',
+    'Source Name': 'source_name',
+    'Destination': 'destination',
+    'Destination Name': 'destination_name',
+    'Departure Date & Time': 'departure_date',
+    'Arrival Date & Time': 'arrival_date',
+    'Duration (hrs)': 'duration_hours',
+    'Stopovers': 'stopovers',
+    'Aircraft Type': 'aircraft_type',
+    'Class': 'class',
+    'Booking Source': 'booking_source',
+    'Base Fare (BDT)': 'base_fare',
+    'Tax & Surcharge (BDT)': 'tax_surcharge',
+    'Total Fare (BDT)': 'total_fare',
+    'Seasonality': 'seasonality',
+    'Days Before Departure': 'days_before_departure'
+}
 
 def load_csv_to_mysql(
     csv_path: str,
@@ -60,9 +80,23 @@ def load_csv_to_mysql(
         total_rows = 0
         
         for chunk_num, chunk_df in enumerate(pd.read_csv(csv_path, chunksize=chunksize), 1):
-            # Rename columns to match table schema (lowercase, underscores)
-            chunk_df.columns = [col.lower().replace(' ', '_').replace('&', 'and') 
-                               for col in chunk_df.columns]
+            # Rename columns using explicit mapping
+            # First clean columns to match mapping keys if necessary, or just use mapping directly
+            # The CSV likely has exact keys as in COLUMN_MAPPING
+            
+            # Create a normalized version of mapping keys to handle potential whitespace issues
+            current_cols = chunk_df.columns.tolist()
+            new_cols = {}
+            
+            for col in current_cols:
+                if col in COLUMN_MAPPING:
+                    new_cols[col] = COLUMN_MAPPING[col]
+                else:
+                    # Fallback normalization just in case
+                    normalized = col.lower().replace(' ', '_').replace('&', 'and')
+                    new_cols[col] = normalized
+            
+            chunk_df.rename(columns=new_cols, inplace=True)
             
             # Add metadata columns
             chunk_df["source_file"] = csv_file.name

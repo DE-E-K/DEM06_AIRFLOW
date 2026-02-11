@@ -56,14 +56,14 @@ def validate_required_columns(df: pd.DataFrame) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
+    # Expected internal column names after ingestion mapping
     required_columns = {
         'airline', 'source', 'destination', 
-        'base_fare', 'tax_surcharge', 'total_fare'
+        'base_fare', 'tax_surcharge', 'total_fare',
+        'departure_date'
     }
     
-    actual_columns = set(col.lower().replace(' ', '_').replace('&', 'and') 
-                        for col in df.columns)
-    
+    actual_columns = set(df.columns)
     missing_columns = required_columns - actual_columns
     
     if missing_columns:
