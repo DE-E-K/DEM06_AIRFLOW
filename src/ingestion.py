@@ -36,18 +36,19 @@ def load_csv_to_mysql(
     csv_path: str,
     target_table: str,
     mysql_engine: Engine,
-    chunksize: int = 1000,
+    chunksize: int = 2000,
     if_exists: str = "append"
 ) -> Dict[str, Any]:
     """
-    Load CSV data into MySQL staging table
+    Load CSV data into MySQL staging table idempotently.
     
     Args:
         csv_path: Path to CSV file
         target_table: Target table name in MySQL
         mysql_engine: SQLAlchemy engine for MySQL
         chunksize: Number of rows per batch insert
-        if_exists: 'fail', 'replace', or 'append'
+        if_exists: 'fail', 'replace', or 'append'. 
+                   If 'append', we still check for duplicates based on source_file.
     
     Returns:
         Dictionary with ingestion metadata:
@@ -77,15 +78,37 @@ def load_csv_to_mysql(
         
         logger.info(f"Loading CSV from {csv_path} to table {target_table}")
         
+        # Idempotency check: Delete existing records for this file if appending
+        # If if_exists='replace', the whole table is dropped/recreated by to_sql anyway (usually),
+        # but to_sql 'replace' drops the table schema too which might lose indices.
+        # Better to truncate or delete specific rows.
+        
+        from src.database import table_exists, execute_query
+        
+        if table_exists(mysql_engine, target_table):
+            if if_exists == 'replace':
+                # Truncate is faster for full reload
+                execute_query(mysql_engine, f"TRUNCATE TABLE {target_table}")
+                logger.info(f"Truncated table {target_table}")
+                # We switch to append after truncation to preserve schema if possible, 
+                # but pandas to_sql replace mode drops table. 
+                # Let's assume we want to keep the schema if it exists and just clear data.
+                if_exists = 'append' 
+            else:
+                # Delete rows for this specific file to ensure idempotency re-run
+                try:
+                    query = f"DELETE FROM {target_table} WHERE source_file = :file"
+                    execute_query(mysql_engine, query, {"file": csv_file.name})
+                    logger.info(f"Cleared existing records for {csv_file.name} in {target_table}")
+                except Exception as e:
+                    # Column might not exist yet if it's a fresh table
+                    logger.warning(f"Could not clear existing records (maybe table is new): {e}")
+
         # Read CSV in chunks
         total_rows = 0
         
         for chunk_num, chunk_df in enumerate(pd.read_csv(csv_path, chunksize=chunksize), 1):
             # Rename columns using explicit mapping
-            # First clean columns to match mapping keys if necessary, or just use mapping directly
-            # The CSV likely has exact keys as in COLUMN_MAPPING
-            
-            # Create a normalized version of mapping keys to handle potential whitespace issues
             current_cols = chunk_df.columns.tolist()
             new_cols = {}
             
@@ -93,7 +116,7 @@ def load_csv_to_mysql(
                 if col in COLUMN_MAPPING:
                     new_cols[col] = COLUMN_MAPPING[col]
                 else:
-                    # Fallback normalization just in case
+                    # Fallback normalization
                     normalized = col.lower().replace(' ', '_').replace('&', 'and')
                     new_cols[col] = normalized
             
@@ -109,10 +132,15 @@ def load_csv_to_mysql(
             chunk_df.to_sql(
                 target_table,
                 con=mysql_engine,
-                if_exists="append" if chunk_num > 1 else if_exists,
+                if_exists=if_exists if chunk_num == 1 else "append",
                 index=False,
-
+                chunksize=chunksize, 
+                method='multi' # Use extended insert for MySQL speed
             )
+            
+            # After first chunk, always append
+            if chunk_num == 1 and if_exists == 'replace':
+                if_exists = 'append'
             
             chunk_rows = len(chunk_df)
             total_rows += chunk_rows
@@ -127,40 +155,68 @@ def load_csv_to_mysql(
         error_msg = f"Error loading CSV: {str(e)}"
         metadata["error_message"] = error_msg
         logger.error(error_msg)
+        # Re-raise to fail the Airflow task
+        raise e
     
     return metadata
 
 
-def get_staging_data(mysql_engine: Engine, table_name: str = "raw_flight_data") -> pd.DataFrame:
+def get_staging_data(
+    mysql_engine: Engine, 
+    table_name: str = "raw_flight_data",
+    source_file: str = None
+) -> pd.DataFrame:
     """
     Retrieve all data from staging table
     
     Args:
         mysql_engine: SQLAlchemy engine for MySQL
         table_name: Name of staging table
+        source_file: Filter by source file name (optional)
     
     Returns:
         DataFrame with all staging data
     """
-    query = f"SELECT * FROM {table_name} WHERE record_status != 'INVALID'"
-    df = pd.read_sql(query, con=mysql_engine)
+    base_query = f"SELECT * FROM {table_name} WHERE record_status != 'INVALID'"
+    params = {}
+    
+    if source_file:
+        query = f"{base_query} AND source_file = %(source_file)s"
+        params['source_file'] = source_file
+    else:
+        query = base_query
+        
+    df = pd.read_sql(query, con=mysql_engine, params=params)
     logger.info(f"Retrieved {len(df)} rows from {table_name}")
     return df
 
 
-def get_staging_data_for_validation(mysql_engine: Engine, table_name: str = "raw_flight_data") -> pd.DataFrame:
+def get_staging_data_for_validation(
+    mysql_engine: Engine, 
+    table_name: str = "raw_flight_data",
+    source_file: str = None
+) -> pd.DataFrame:
     """
     Retrieve all data from staging table for validation (including flagged records)
     
     Args:
         mysql_engine: SQLAlchemy engine for MySQL
         table_name: Name of staging table
+        source_file: Filter by source file name (optional)
     
     Returns:
         DataFrame with all staging data
     """
-    query = f"SELECT * FROM {table_name}"
-    df = pd.read_sql(query, con=mysql_engine)
+    base_query = f"SELECT * FROM {table_name}"
+    params = {}
+    
+    if source_file:
+        query = f"{base_query} WHERE source_file = %(source_file)s"
+        params['source_file'] = source_file
+    else:
+        query = base_query
+        
+    df = pd.read_sql(query, con=mysql_engine, params=params)
     logger.info(f"Retrieved {len(df)} rows from {table_name} for validation")
     return df
 

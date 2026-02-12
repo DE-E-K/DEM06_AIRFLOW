@@ -7,7 +7,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 
-from src.database import get_mysql_engine, get_postgres_engine
+from src.database import get_mysql_engine, get_postgres_engine, bulk_insert_postgres
 from src.ingestion import load_csv_to_mysql, get_staging_data_for_validation
 from src.validation import validate_data_quality
 from src.transformation import clean_and_enrich
@@ -30,8 +30,11 @@ def ingest_to_staging(**context):
 
 
 def validate_data(**context):
+    ingest_meta = context['ti'].xcom_pull(task_ids="ingest_to_staging")
+    source_file = ingest_meta.get('source_file') if ingest_meta else None
+    
     mysql_engine = get_mysql_engine()
-    df = get_staging_data_for_validation(mysql_engine)
+    df = get_staging_data_for_validation(mysql_engine, source_file=source_file)
     report = validate_data_quality(df)
     mysql_engine.dispose()
     
@@ -69,8 +72,11 @@ def validate_data(**context):
 
 
 def transform_data(**context):
+    ingest_meta = context['ti'].xcom_pull(task_ids="ingest_to_staging")
+    source_file = ingest_meta.get('source_file') if ingest_meta else None
+
     mysql_engine = get_mysql_engine()
-    df = get_staging_data_for_validation(mysql_engine)
+    df = get_staging_data_for_validation(mysql_engine, source_file=source_file)
     mysql_engine.dispose()
 
     transformed = clean_and_enrich(df)
@@ -100,7 +106,8 @@ def load_to_postgres(**context):
         import pandas as pd
         df = pd.DataFrame(records)
         postgres_engine = get_postgres_engine()
-        df.to_sql("flights_enriched", con=postgres_engine, if_exists="append", index=False, method="multi")
+        # Use bulk_insert_postgres for optimized batch loading
+        bulk_insert_postgres(postgres_engine, df, "flights_enriched", if_exists="ignore")
         postgres_engine.dispose()
 
     if kpis_dict:

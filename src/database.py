@@ -3,10 +3,14 @@ Database connection and utility functions for MySQL and PostgreSQL
 """
 import os
 from typing import Optional
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import QueuePool
 import logging
+import pandas as pd
+from io import StringIO
+import csv
+import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +64,7 @@ class MySQLConnection(DatabaseConnection):
     
     def __init__(self, user: str, password: str, host: str = "localhost", port: int = 3306, database: str = "flight_staging"):
         """Initialize MySQL connection"""
-        super().__init__(user, password, host, port, database, "mysql+mysqlconnector")
+        super().__init__(user, password, host, port, database, "mysql+mysqldb")
     
     def get_connection_string(self) -> str:
         """Generate MySQL connection string"""
@@ -192,10 +196,72 @@ def execute_query(engine: Engine, query: str, params: Optional[dict] = None):
     Returns:
         Query result
     """
-    with engine.connect() as connection:
-        result = connection.execute(query, params or {})
-        connection.commit()
+    with engine.begin() as connection:
+        result = connection.execute(text(query), params or {})
         return result
+
+
+def bulk_insert_postgres(engine: Engine, df: pd.DataFrame, table_name: str, if_exists: str = 'append') -> int:
+    """
+    Bulk insert DataFrame into PostgreSQL using COPY or execute_values for performance
+    
+    Args:
+        engine: SQLAlchemy engine
+        df: DataFrame to insert
+        table_name: Target table
+        if_exists: 'append', 'replace', or 'fail'
+        
+    Returns:
+        Number of rows inserted
+    """
+    if df.empty:
+        return 0
+        
+    # Get raw connection
+    raw_conn = engine.raw_connection()
+    try:
+        cur = raw_conn.cursor()
+        
+        # Handle table truncation if replace
+        if if_exists == 'replace':
+            cur.execute(f"TRUNCATE TABLE {table_name}")
+            raw_conn.commit()
+        
+        # Prepare data columns to match table
+        # This assumes DF columns match table columns
+        columns = list(df.columns)
+        
+        # Convert DataFrame to list of tuples for execute_values
+        # This is safer than COPY for potential escaping issues, and efficient enough for batch loading
+        data = [tuple(x) for x in df.to_numpy()]
+        
+        # Generate INSERT query
+        cols_str = ','.join(columns)
+        base_query = f"INSERT INTO {table_name} ({cols_str}) VALUES %s"
+        
+        if if_exists == 'ignore':
+            # Use ON CONFLICT DO NOTHING
+            # Note: This requires a unique constraint on the table matching the conflict
+            query = f"{base_query} ON CONFLICT DO NOTHING"
+        else:
+            query = base_query
+        
+        # Use execute_values 
+        psycopg2.extras.execute_values(
+            cur, query, data, template=None, page_size=1000
+        )
+        
+        raw_conn.commit()
+        logger.info(f"Bulk inserted {len(data)} rows into {table_name}")
+        return len(data)
+        
+    except Exception as e:
+        raw_conn.rollback()
+        logger.error(f"Error in bulk insert: {e}")
+        raise e
+    finally:
+        raw_conn.close()
+
 
 
 if __name__ == "__main__":

@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS flights_enriched (
   flight_date DATE,
   season VARCHAR(50),
   is_valid BOOLEAN DEFAULT TRUE,
-  loaded_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  loaded_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unique_flight_record UNIQUE (airline, source, destination, departure_date, class, booking_source, base_fare)
 );
-
 CREATE TABLE IF NOT EXISTS kpi_airline_average (
   id SERIAL PRIMARY KEY,
   airline VARCHAR(100),

@@ -55,52 +55,38 @@ def calculate_total_fare(df: pd.DataFrame) -> pd.DataFrame:
 
 def classify_season(date_obj) -> str:
     """
-    Classify date into season for fare analysis
-    
-    Seasons:
-    - PEAK_EID: Around Islamic Eid holidays (~2-3 weeks in May and July, approximate)
-    - PEAK_WINTER: December 1 - January 31 (winter holidays)
-    - NON_PEAK: All other dates
-    
-    Args:
-        date_obj: Date object, datetime, or string
-    
-    Returns:
-        Season classification string
+    Classify date into season for fare analysis (Scalar version)
     """
     try:
         if pd.isna(date_obj):
             return 'UNKNOWN'
         
-        # Convert to datetime if string
         if isinstance(date_obj, str):
-            date_obj = pd.to_datetime(date_obj)
+            date_obj = pd.to_datetime(date_obj, errors='coerce')
+            if pd.isna(date_obj):
+                return 'UNKNOWN'
         elif hasattr(date_obj, 'month'):
-            # Already a date-like object, extract month/day directly
             pass
         else:
-            date_obj = pd.to_datetime(date_obj)
+            date_obj = pd.to_datetime(date_obj, errors='coerce')
+            if pd.isna(date_obj):
+                return 'UNKNOWN'
         
         month = date_obj.month
-        day = date_obj.day
         
-        # Eid al-Fitr (May) - approximate: May 1-31 for MVP
+        # Eid al-Fitr (May)
         if month == 5:
             return 'PEAK_EID'
-        
-        # Eid al-Adha (July) - approximate: July 1-31 for MVP
+        # Eid al-Adha (July)
         if month == 7:
             return 'PEAK_EID'
-        
-        # Winter holidays (Dec 1 - Jan 31)
+        # Winter holidays (Dec-Jan)
         if month in [12, 1]:
             return 'PEAK_WINTER'
         
-        # Non-peak
         return 'NON_PEAK'
     
-    except Exception as e:
-        logger.warning(f"Error classifying season for {date_obj}: {e}")
+    except Exception:
         return 'UNKNOWN'
 
 

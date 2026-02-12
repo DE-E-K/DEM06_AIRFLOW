@@ -1,10 +1,8 @@
 version: '3.8'
 
-x-airflow-common:
-  &airflow-common
+x-airflow-common: &airflow-common
   build: .
-  environment:
-    &airflow-common-env
+  environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_user:learnairflow@postgres:5432/airflow
     AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
@@ -12,7 +10,9 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW__WEBSERVER__WORKERS: '2'
     _PIP_ADDITIONAL_REQUIREMENTS: ''
+    PYTHONPATH: /opt/airflow
     # MySQL connection
     MYSQL_HOST: mysql
     MYSQL_PORT: 3306
@@ -40,8 +40,7 @@ x-airflow-common:
     - ./sql:/opt/airflow/sql
     - ./config:/opt/airflow/config
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on:
-    &airflow-common-depends-on
+  depends_on: &airflow-common-depends-on
     postgres:
       condition: service_healthy
     mysql:
@@ -49,7 +48,7 @@ x-airflow-common:
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16.2
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -58,16 +57,16 @@ services:
       - postgres-db-volume:/var/lib/postgresql/data
       - ./sql/init-postgres.sh:/docker-entrypoint-initdb.d/init-postgres.sh
     ports:
-      - "5432:5432"
+      - "5435:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      test: [ "CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "airflow" ]
       interval: 10s
       retries: 5
       start_period: 30s
     restart: always
 
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.36
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -77,9 +76,9 @@ services:
       - mysql-db-volume:/var/lib/mysql
       - ./sql/mysql_init.sql:/docker-entrypoint-initdb.d/mysql_init.sql
     ports:
-      - "3307:3306"
+      - "3308:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}" ]
       interval: 10s
       retries: 5
       start_period: 30s
@@ -90,9 +89,9 @@ services:
     <<: *airflow-common
     command: webserver
     ports:
-      - "8080:8080"
+      - "8090:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -107,7 +106,7 @@ services:
     <<: *airflow-common
     command: scheduler
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      test: [ "CMD", "curl", "--fail", "http://localhost:8974/health" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -122,7 +121,7 @@ services:
     <<: *airflow-common
     command: triggerer
     healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      test: [ "CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"' ]
       interval: 30s
       timeout: 10s
       retries: 5

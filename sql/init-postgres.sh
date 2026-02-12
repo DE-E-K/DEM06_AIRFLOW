@@ -24,7 +24,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "flight_analytics" 
       flight_date DATE,
       season VARCHAR(50),
       is_valid BOOLEAN DEFAULT TRUE,
-      loaded_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      loaded_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT unique_flight_record UNIQUE (airline, source, destination, flight_date, total_fare)
     );
 
     CREATE TABLE IF NOT EXISTS kpi_airline_average (
