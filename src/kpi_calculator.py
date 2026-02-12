@@ -48,7 +48,7 @@ def compute_airline_average_fare(df: pd.DataFrame) -> pd.DataFrame:
             kpi[['avg_base_fare', 'avg_tax_surcharge', 'avg_total_fare']].round(2)
         
         # Add metadata
-        kpi['computed_at'] = datetime.utcnow()
+        kpi['computed_at'] = datetime.utcnow().isoformat()
         
         logger.info(f"Computed average fares for {len(kpi)} airlines")
         
@@ -90,7 +90,7 @@ def compute_seasonal_variation(df: pd.DataFrame) -> pd.DataFrame:
         
         # Merge results
         variation = pd.DataFrame()
-        variation['airline'] = set(peak_by_airline.index) | set(non_peak_by_airline.index)
+        variation['airline'] = list(set(peak_by_airline.index) | set(non_peak_by_airline.index))
         
         variation['avg_fare_peak'] = variation['airline'].map(
             peak_by_airline['mean']
@@ -116,7 +116,7 @@ def compute_seasonal_variation(df: pd.DataFrame) -> pd.DataFrame:
         ).round(2)
         
         # Add metadata
-        variation['computed_at'] = datetime.utcnow()
+        variation['computed_at'] = datetime.utcnow().isoformat()
         
         logger.info(f"Computed seasonal variation for {len(variation)} airlines")
         
@@ -163,7 +163,7 @@ def compute_popular_routes(df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
         kpi['avg_fare_on_route'] = kpi['avg_fare_on_route'].round(2)
         
         # Add metadata
-        kpi['computed_at'] = datetime.utcnow()
+        kpi['computed_at'] = datetime.utcnow().isoformat()
         
         # Return top N
         kpi = kpi.head(top_n)
@@ -194,7 +194,7 @@ def compute_booking_count_by_airline(df: pd.DataFrame) -> pd.DataFrame:
     try:
         kpi = df.groupby('airline').size().reset_index(name='total_bookings')
         kpi = kpi.sort_values('total_bookings', ascending=False)
-        kpi['computed_at'] = datetime.utcnow()
+        kpi['computed_at'] = datetime.utcnow().isoformat()
         
         logger.info(f"Computed booking counts for {len(kpi)} airlines")
         

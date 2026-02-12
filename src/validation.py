@@ -22,14 +22,15 @@ class ValidationReport:
         self.validation_timestamp = datetime.utcnow()
     
     def add_check(self, check_name: str, check_type: str, passed: int, failed: int, 
-                  error_message: str = None):
+                  error_message: str = None, failed_ids: List[int] = None):
         """Add a validation check result"""
         self.checks_performed.append({
             "check_name": check_name,
             "check_type": check_type,
             "records_passed": passed,
             "records_failed": failed,
-            "error_message": error_message
+            "error_message": error_message,
+            "failed_ids": failed_ids or []
         })
     
     def to_dict(self) -> Dict[str, Any]:
@@ -265,29 +266,34 @@ def validate_data_quality(df: pd.DataFrame, valid_cities: List[str] = None) -> V
     # Data type validation
     invalid_by_type = validate_data_types(df)
     type_invalid_count = sum(len(v) for v in invalid_by_type.values())
-    report.add_check("Data Types", "TYPE_CHECK", report.total_records - type_invalid_count, type_invalid_count)
+    type_invalid_ids = list(set().union(*[df.loc[indices, 'id'].tolist() for indices in invalid_by_type.values()]))
+    report.add_check("Data Types", "TYPE_CHECK", report.total_records - type_invalid_count, type_invalid_count, failed_ids=type_invalid_ids)
     
     # Null value check
     null_locations = check_null_values(df)
     null_invalid_count = len(set(val for vals in null_locations.values() for val in vals))
-    report.add_check("Null Values", "NULLS", report.total_records - null_invalid_count, null_invalid_count)
+    null_invalid_ids = list(set().union(*[df.loc[indices, 'id'].tolist() for indices in null_locations.values()]))
+    report.add_check("Null Values", "NULLS", report.total_records - null_invalid_count, null_invalid_count, failed_ids=null_invalid_ids)
     
     # Negative values check
     negative_locations = check_negative_values(df)
     negative_invalid_count = len(set(val for vals in negative_locations.values() for val in vals))
+    negative_invalid_ids = list(set().union(*[df.loc[indices, 'id'].tolist() for indices in negative_locations.values()]))
     report.add_check("Negative Values", "BUSINESS_RULE", report.total_records - negative_invalid_count, 
-                    negative_invalid_count)
+                    negative_invalid_count, failed_ids=negative_invalid_ids)
     
     # City validation check
     invalid_cities = check_valid_cities(df, valid_cities)
     city_invalid_count = len(set(val for vals in invalid_cities.values() for val in vals))
+    city_invalid_ids = list(set().union(*[df.loc[indices, 'id'].tolist() for indices in invalid_cities.values()]))
     report.add_check("Valid Cities", "BUSINESS_RULE", report.total_records - city_invalid_count, 
-                    city_invalid_count)
+                    city_invalid_count, failed_ids=city_invalid_ids)
     
     # Fare consistency check
     fare_inconsistent = check_fare_consistency(df)
+    fare_inconsistent_ids = df.loc[fare_inconsistent, 'id'].tolist()
     report.add_check("Fare Consistency", "BUSINESS_RULE", report.total_records - len(fare_inconsistent), 
-                    len(fare_inconsistent))
+                    len(fare_inconsistent), failed_ids=fare_inconsistent_ids)
     
     # Calculate overall validity
     all_invalid_indices = set()

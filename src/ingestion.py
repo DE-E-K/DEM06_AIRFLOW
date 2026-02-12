@@ -4,6 +4,7 @@ Data ingestion - Load CSV data into MySQL staging table
 import pandas as pd
 from pathlib import Path
 from typing import Tuple, Dict, Any
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from datetime import datetime
 import logging
@@ -110,7 +111,7 @@ def load_csv_to_mysql(
                 con=mysql_engine,
                 if_exists="append" if chunk_num > 1 else if_exists,
                 index=False,
-                method="multi"
+
             )
             
             chunk_rows = len(chunk_df)
@@ -188,15 +189,14 @@ def update_staging_record_status(
         return 0
     
     ids_str = ",".join(map(str, record_ids))
-    query = f"""
+    query = text(f"""
     UPDATE {table_name}
-    SET record_status = %s, validation_errors = %s
+    SET record_status = :status, validation_errors = :error
     WHERE id IN ({ids_str})
-    """
+    """)
     
-    with mysql_engine.connect() as conn:
-        result = conn.execute(query, (status, error_message))
-        conn.commit()
+    with mysql_engine.begin() as conn:
+        result = conn.execute(query, {"status": status, "error": error_message})
         rows_updated = result.rowcount
     
     logger.info(f"Updated {rows_updated} records to status '{status}'")

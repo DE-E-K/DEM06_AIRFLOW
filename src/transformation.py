@@ -63,7 +63,7 @@ def classify_season(date_obj) -> str:
     - NON_PEAK: All other dates
     
     Args:
-        date_obj: Date object or datetime
+        date_obj: Date object, datetime, or string
     
     Returns:
         Season classification string
@@ -74,6 +74,11 @@ def classify_season(date_obj) -> str:
         
         # Convert to datetime if string
         if isinstance(date_obj, str):
+            date_obj = pd.to_datetime(date_obj)
+        elif hasattr(date_obj, 'month'):
+            # Already a date-like object, extract month/day directly
+            pass
+        else:
             date_obj = pd.to_datetime(date_obj)
         
         month = date_obj.month
@@ -133,11 +138,11 @@ def clean_and_enrich(df: pd.DataFrame, extract_date_col: str = None) -> pd.DataF
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # 4. Create or extract flight_date column
+    # 4. Create or extract flight_date column (as string for JSON serialization)
     # Priority: departure_date > extract_date_col > current date
     if 'departure_date' in df.columns:
         try:
-            df['flight_date'] = pd.to_datetime(df['departure_date']).dt.date
+            df['flight_date'] = pd.to_datetime(df['departure_date']).dt.strftime('%Y-%m-%d')
             logger.info("Extracted flight_date from departure_date")
         except Exception as e:
             logger.warning(f"Could not extract flight_date from departure_date: {e}")
@@ -145,14 +150,14 @@ def clean_and_enrich(df: pd.DataFrame, extract_date_col: str = None) -> pd.DataF
     elif 'flight_date' not in df.columns:
         if extract_date_col and extract_date_col in df.columns:
             try:
-                df['flight_date'] = pd.to_datetime(df[extract_date_col]).dt.date
+                df['flight_date'] = pd.to_datetime(df[extract_date_col]).dt.strftime('%Y-%m-%d')
                 logger.info(f"Extracted flight_date from {extract_date_col}")
             except Exception as e:
                 logger.warning(f"Could not extract flight_date: {e}")
                 df['flight_date'] = None
         else:
             # Use current date as placeholder if no date column
-            df['flight_date'] = datetime.now().date()
+            df['flight_date'] = datetime.now().strftime('%Y-%m-%d')
             logger.info("Used current date as flight_date (no date column in source)")
     
     # 5. Classify season
@@ -181,8 +186,16 @@ def clean_and_enrich(df: pd.DataFrame, extract_date_col: str = None) -> pd.DataF
         df['is_valid'] = True
         logger.info("Added is_valid column (default: True)")
     
-    # 7. Add transformation timestamp
-    df['loaded_timestamp'] = datetime.utcnow()
+    # 7. Convert all datetime64 columns to ISO string format for XCom serialization
+    datetime_cols = df.select_dtypes(include=['datetime64']).columns.tolist()
+    if datetime_cols:
+        logger.info(f"Converting datetime columns to ISO strings: {datetime_cols}")
+        for col in datetime_cols:
+            df[col] = df[col].dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3]  # ISO format with milliseconds
+        logger.info(f"Converted {len(datetime_cols)} datetime columns to strings")
+    
+    # 8. Add transformation timestamp (as ISO string for JSON serialization)
+    df['loaded_timestamp'] = datetime.utcnow().isoformat()
     
     logger.info(f"Transformation completed for {len(df)} records")
     
@@ -258,7 +271,7 @@ def handle_missing_values(df: pd.DataFrame, strategy: str = 'drop') -> Tuple[pd.
         logger.info(f"Imputed numeric columns, dropped {rows_changed} rows with missing categorical values")
     
     elif strategy == 'forward_fill':
-        df = df.fillna(method='ffill')
+        df = df.ffill()
         rows_changed = initial_count - len(df[df.isna().any(axis=1)])
         logger.info(f"Applied forward fill for missing values")
     
