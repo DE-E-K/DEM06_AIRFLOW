@@ -2,6 +2,7 @@
 Airflow DAG for Flight Price Pipeline
 """
 import os
+import json
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -119,7 +120,45 @@ def load_to_postgres(**context):
 
 
 def generate_report(**context):
-    return {"status": "completed", "timestamp": datetime.utcnow().isoformat()}
+    ti = context["ti"]
+    dag_run = context.get("dag_run")
+
+    transformed_records = ti.xcom_pull(task_ids="transform_data") or []
+    kpis_dict = ti.xcom_pull(task_ids="compute_kpis") or {}
+    validation_report = ti.xcom_pull(task_ids="validate_data") or {}
+
+    kpi_counts = {
+        key: len(value) if isinstance(value, list) else 0
+        for key, value in kpis_dict.items()
+    }
+
+    report_payload = {
+        "status": "completed",
+        "generated_at": datetime.utcnow().isoformat(),
+        "dag_id": context.get("dag").dag_id if context.get("dag") else "flight_price_pipeline",
+        "run_id": dag_run.run_id if dag_run else context.get("run_id", "unknown_run"),
+        "execution_date": context.get("ds"),
+        "records_transformed": len(transformed_records),
+        "kpi_counts": kpi_counts,
+        "validation_summary": {
+            "total_records": validation_report.get("total_records"),
+            "valid_records": validation_report.get("valid_records"),
+            "invalid_records": validation_report.get("invalid_records"),
+            "quality_score": validation_report.get("overall_quality_score"),
+        },
+    }
+
+    report_dir = os.getenv("PIPELINE_REPORT_DIR", "/opt/airflow/logs/reports")
+    os.makedirs(report_dir, exist_ok=True)
+
+    safe_run_id = report_payload["run_id"].replace(":", "_").replace("/", "_")
+    report_file = os.path.join(report_dir, f"flight_pipeline_report_{safe_run_id}.json")
+
+    with open(report_file, "w", encoding="utf-8") as file_handle:
+        json.dump(report_payload, file_handle, indent=2)
+
+    report_payload["report_file"] = report_file
+    return report_payload
 
 
 default_args = {

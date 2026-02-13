@@ -1,4 +1,4 @@
-# 📄 Airflow DAG Documentation
+# Airflow DAG Documentation
 
 ## DAG Overview
 
@@ -8,7 +8,7 @@
 - **SLA**: N/A
 - **Catchup**: `False` (Historical runs ignored)
 
-## 🕸️ Task Dependency Graph
+## Task Dependency Graph
 
 ```mermaid
 graph LR
@@ -36,7 +36,7 @@ graph LR
 - **Type**: `PythonOperator`
 - **Goal**: High-speed batch insert of raw CSV data into MySQL.
 - **Details**:
-    - Chunk Size: 1,000 rows
+    - Chunk Size: 2,000 rows
     - Normalization: Column names converted to `snake_case`.
 
 ### 3. `validate_data`
@@ -64,19 +64,23 @@ graph LR
 - **Type**: `PythonOperator`
 - **Goal**: Persist enriched data and KPIs.
 - **Strategy**:
-    - `flights_enriched`: Append
-    - `kpi_*`: Upsert/Replace
+    - `flights_enriched`: Batch insert with `ON CONFLICT DO NOTHING` on duplicate keys.
+    - `kpi_*`: Replace current KPI snapshots per run.
+    - Automatically creates the PostgreSQL target database and `flights_enriched` table when absent.
 
 ### 7. `generate_report`
 - **Type**: `PythonOperator`
-- **Goal**: Compile final execution stats for notification/logging.
+- **Goal**: Compile final execution stats and persist them as a report artifact.
+- **Output**:
+    - XCom payload with run summary.
+    - JSON report file in `/opt/airflow/logs/reports` (mounted to `logs/reports` in the workspace).
 
 ## Configuration & Alerts
 
 ### Retry Strategy
 - **Count**: 2 retries
-- **Delay**: 5 minutes (Linear backoff)
+- **Delay**: 5 minutes
 
 ### Notifications
-- **Email**: Configurable via `email_on_failure` default result.
+- **Email**: Not enabled by default in the DAG.
 - **Logs**: Standard Airflow logs mounted in `./logs`.

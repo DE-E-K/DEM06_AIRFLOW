@@ -1,4 +1,4 @@
-# 🛠️ Setup Guide
+# Setup Guide
 
 ## Prerequisites
 
@@ -47,21 +47,36 @@ FERNET_KEY=YourGeneratedKeyHere...
 Spin up the entire stack (MySQL, Postgres, Airflow) using Docker Compose:
 
 ```bash
-docker compose --env-file config/.env -f docker/docker-compose.yml up --build -d
+docker compose --env-file config/.env up --build -d
 ```
 > **Note**: The first build may take 5-10 minutes as it downloads images and installs dependencies.
 
 ### 5. Verify & Access
 Check that all containers are healthy:
 ```bash
-docker compose -f docker/docker-compose.yml ps
+docker compose ps
 ```
 
 | Service | access URL | Credentials |
 |---------|-----------|-------------|
-| **Airflow UI** | http://localhost:8080 | user: `admin` / pass: `admin` |
-| **MySQL Staging** | `localhost:3306` | `airflow_user` / `airflow_password` |
-| **Postgres Utils** | `localhost:5432` | `airflow_user` / `airflow_password` |
+| **Airflow UI** | http://localhost:8090 | user: `admin` / pass: `admin_password` (or configured values) |
+| **MySQL Staging** | `localhost:3308` | values from `config/.env` |
+| **Postgres Analytics** | `localhost:5435` | values from `config/.env` |
+
+### Pipeline Report Artifact
+After each successful run, the `generate_report` task writes a JSON report to:
+
+```text
+logs/reports/
+```
+
+The report file name follows:
+
+```text
+flight_pipeline_report_<run_id>.json
+```
+
+For direct database access and query examples, see [Database Interaction Guide](DATABASE_INTERACTION.md).
 
 ## Pipeline Operations
 
@@ -89,7 +104,7 @@ docker compose -f docker/docker-compose.yml ps
 - **Cause**: Containers not fully ready.
 - **Fix**: Wait 60s or restart services.
   ```bash
-  docker compose -f docker/docker-compose.yml restart
+  docker compose restart
   ```
 
 #### "Fernet Key" Error
@@ -99,6 +114,6 @@ docker compose -f docker/docker-compose.yml ps
 ### Hard Reset
 If you need to wipe everything (including databases) and start fresh:
 ```bash
-docker compose -f docker/docker-compose.yml down -v
+docker compose down -v
 ```
-**⚠️ WARNING**: This deletes all processed data!
+Warning: This deletes all persisted staging and analytics data.

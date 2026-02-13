@@ -39,7 +39,7 @@ The databases will be automatically initialized with the SQL scripts in the `sql
 The Docker setup includes:
 - **PostgreSQL**: Airflow metadata DB + Analytics DB
 - **MySQL**: Staging database for raw flight data
-- **Airflow Webserver**: Web interface on port 8080
+- **Airflow Webserver**: Web interface on port 8090
 - **Airflow Scheduler**: DAG execution scheduler
 - **Airflow Triggerer**: Handles deferred tasks
 
