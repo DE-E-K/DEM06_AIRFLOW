@@ -10,7 +10,9 @@ import logging
 import pandas as pd
 from io import StringIO
 import csv
+import psycopg2
 import psycopg2.extras
+from psycopg2 import sql
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +98,33 @@ class PostgreSQLConnection(DatabaseConnection):
     def get_connection_string(self) -> str:
         """Generate PostgreSQL connection string"""
         return f"{self.dialect}://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+
+    def _ensure_database_exists(self):
+        """Create target database if it does not already exist."""
+        admin_conn = psycopg2.connect(
+            dbname="postgres",
+            user=self.user,
+            password=self.password,
+            host=self.host,
+            port=self.port,
+            connect_timeout=10,
+        )
+        try:
+            admin_conn.autocommit = True
+            with admin_conn.cursor() as cursor:
+                cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (self.database,))
+                exists = cursor.fetchone() is not None
+
+                if not exists:
+                    logger.info(f"Database '{self.database}' does not exist. Creating it.")
+                    cursor.execute(sql.SQL("CREATE DATABASE {};").format(sql.Identifier(self.database)))
+                    logger.info(f"Database '{self.database}' created successfully.")
+        finally:
+            admin_conn.close()
     
     def create_engine(self) -> Engine:
         """Create PostgreSQL engine with pooling and timeouts"""
+        self._ensure_database_exists()
         conn_string = self.get_connection_string()
         logger.info(f"Creating PostgreSQL engine for {self.host}:{self.port}/{self.database}")
         
@@ -201,6 +227,28 @@ def execute_query(engine: Engine, query: str, params: Optional[dict] = None):
         return result
 
 
+def ensure_flights_enriched_table(engine: Engine):
+    """Ensure flights_enriched table exists in PostgreSQL."""
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS flights_enriched (
+        id INTEGER,
+        airline VARCHAR(100),
+        source VARCHAR(100),
+        destination VARCHAR(100),
+        base_fare NUMERIC(10,2),
+        tax_surcharge NUMERIC(10,2),
+        total_fare NUMERIC(10,2),
+        flight_date DATE,
+        season VARCHAR(50),
+        is_valid BOOLEAN DEFAULT TRUE,
+        loaded_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT unique_flight_record UNIQUE (airline, source, destination, flight_date, total_fare)
+    );
+    """
+    with engine.begin() as connection:
+        connection.execute(text(create_table_sql))
+
+
 def bulk_insert_postgres(engine: Engine, df: pd.DataFrame, table_name: str, if_exists: str = 'append') -> int:
     """
     Bulk insert DataFrame into PostgreSQL using COPY or execute_values for performance
@@ -216,6 +264,9 @@ def bulk_insert_postgres(engine: Engine, df: pd.DataFrame, table_name: str, if_e
     """
     if df.empty:
         return 0
+
+    if table_name == "flights_enriched":
+        ensure_flights_enriched_table(engine)
         
     # Get raw connection
     raw_conn = engine.raw_connection()
@@ -227,13 +278,31 @@ def bulk_insert_postgres(engine: Engine, df: pd.DataFrame, table_name: str, if_e
             cur.execute(f"TRUNCATE TABLE {table_name}")
             raw_conn.commit()
         
-        # Prepare data columns to match table
-        # This assumes DF columns match table columns
-        columns = list(df.columns)
+        # Prepare data columns to match table schema
+        inspector = inspect(engine)
+        table_columns = {col["name"] for col in inspector.get_columns(table_name)}
+
+        columns = [col for col in df.columns if col in table_columns]
+        dropped_columns = [col for col in df.columns if col not in table_columns]
+
+        if dropped_columns:
+            logger.warning(
+                "Dropping columns not present in %s: %s",
+                table_name,
+                ", ".join(dropped_columns),
+            )
+
+        if not columns:
+            raise ValueError(
+                f"No matching columns to insert into {table_name}. "
+                f"DataFrame columns: {list(df.columns)}"
+            )
+
+        insert_df = df[columns]
         
         # Convert DataFrame to list of tuples for execute_values
         # This is safer than COPY for potential escaping issues, and efficient enough for batch loading
-        data = [tuple(x) for x in df.to_numpy()]
+        data = [tuple(x) for x in insert_df.to_numpy()]
         
         # Generate INSERT query
         cols_str = ','.join(columns)
