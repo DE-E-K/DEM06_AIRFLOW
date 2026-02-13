@@ -34,7 +34,7 @@ graph LR
 
 ### 2. `ingest_to_staging`
 - **Type**: `PythonOperator`
-- **Goal**: High-speed batch insert of raw CSV data into MySQL.
+- **Goal**: High-throughput batch insert of raw CSV data into MySQL.
 - **Details**:
     - Chunk Size: 2,000 rows
     - Normalization: Column names converted to `snake_case`.

@@ -1,4 +1,4 @@
-# 🏗️ Pipeline Architecture
+# Pipeline Architecture
 
 ## High-Level Overview
 
@@ -74,7 +74,7 @@ Enriches valid data for business insights:
 ### 4. KPI Computation (`compute_kpis`)
 Aggregates data into business-ready metrics:
 
-| Metric | logic | Target Table |
+| Metric | Logic | Target Table |
 |--------|-------|--------------|
 | **Airline Strategy** | Avg `Base`/`Total Fare (BDT)` per airline. | `kpi_airline_average` |
 | **Seasonal Trends** | Price elasticity (Peak vs Non-Peak). | `kpi_seasonal_variation` |

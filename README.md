@@ -17,21 +17,41 @@ An Airflow data engineering pipeline designed to ingest, validate, transform, an
     - **Route Intelligence**: Identification of most popular and profitable routes.
 - **Scalable Architecture**: Containerized with Docker Compose for consistent deployment across environments.
 
-## 🏗️ Architecture
+## Architecture
 
 The pipeline follows a modern ELT (Extract, Load, Transform) pattern:
 
+
 ```mermaid
-graph LR
-    A[Raw CSV] -->|Ingest| B[(MySQL Staging)]
-    B -->|Validate| C{Data Quality}
-    C -->|Valid| D[Transformation]
-    C -->|Invalid| E[Error Log]
-    D -->|Enrich| F[(PostgreSQL Analytics)]
-    F -->|Query| G[KPI Dashboards]
+graph TD
+    subgraph Source
+    A[Raw CSV Data]
+    end
+
+    subgraph Staging Layer
+    B[(MySQL Staging)]
+    end
+
+    subgraph Processing Layer
+    C{Data Validation}
+    D[Transformation & Enrichment]
+    end
+
+    subgraph Analytics Layer
+    E[(PostgreSQL Analytics)]
+    F[KPI Tables]
+    G[Data Quality Metrics]
+    end
+
+    A -->|Ingest| B
+    B -->|Fetch| C
+    C -->|Valid| D
+    C -->|Invalid| G
+    D -->|Load| E
+    D -->|Compute| F
 ```
 
-For a detailed technical deep-dive, please refer to the [Architecture Documentation](docs/ARCHITECTURE.md).
+For a detailed technical deep dive, please refer to the [Architecture Documentation](docs/ARCHITECTURE.md).
 
 ## Project Structure
 
@@ -52,7 +72,7 @@ flight-price-pipeline/
 
 ### Prerequisites
 - **Docker Desktop 29.1** 
-- **Python 3.11** (util for key generation)
+- **Python 3.11** (utility for key generation)
 
 ### Installation
 
@@ -62,7 +82,7 @@ flight-price-pipeline/
    cd DEM06_AIRFLOW
    ```
 
-2. **Setup Configuration**
+2. **Configuration Setup**
    Generate a Fernet key for Airflow security:
    ```bash
    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -92,7 +112,8 @@ flight-price-pipeline/
 - [DAG Explanations](docs/DAG_DOCUMENTATION.md) - Workflow logic and task breakdown.
 - [KPI Definitions](docs/KPI_DEFINITIONS.md) - Business logic behind the metrics.
 - [Database Interaction Guide](docs/DATABASE_INTERACTION.md) - How to connect, query, and validate data in MySQL and PostgreSQL.
+- [Challenges and Resolutions](docs/CHALLENGES_AND_RESOLUTIONS.md) - Issues encountered during implementation and how each was resolved.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
